@@ -10,6 +10,7 @@
  */
 package io.ionic.links;
 
+import android.os.Build;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
@@ -20,6 +21,7 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.lang.reflect.Array;
 import java.util.Date;
 import java.util.TimeZone;
 
@@ -170,7 +172,52 @@ public class IonicDeeplink extends CordovaPlugin {
       if (o instanceof Collection) {
         return new JSONArray((Collection) o);
       } else if (o.getClass().isArray()) {
-        return new JSONArray(o);
+        //--Rut - 21/12/2017 - al momento, manteniamo il supporto per chi ha Android < 4.4
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT){
+          return new JSONArray(o);
+        }
+
+        // Android < 4.4 - polyfill custom copiata dalle api nuove
+        if(!o.getClass().isArray()){
+          throw new JSONException("Not a primitive array: " + o.getClass());
+        }
+
+        int length = Array.getLength(o);
+        JSONArray output = new JSONArray();
+        for (int i = 0; i < length; ++i) {
+          Object arrayObject = Array.get(o, i);
+          Object itemToPut = null;
+
+          if(arrayObject == null || arrayObject instanceof  JSONArray || arrayObject instanceof JSONObject
+                  || arrayObject.equals(JSONObject.NULL)){
+            itemToPut = arrayObject;             
+          }
+          else {
+            try{
+              if(arrayObject instanceof Collection){
+                itemToPut = new JSONArray((Collection) arrayObject);
+              }
+              else if(arrayObject.getClass().isArray()){
+                itemToPut = new JSONArray(o);
+              }
+              else if(arrayObject instanceof Map){
+                itemToPut = new JSONObject((Map) arrayObject);
+              }
+              else if(arrayObject instanceof Boolean || arrayObject instanceof Byte || arrayObject instanceof Character
+                      || arrayObject instanceof Double || arrayObject instanceof Float || arrayObject instanceof Integer
+                      || arrayObject instanceof Long || arrayObject instanceof Short || arrayObject instanceof String){
+                itemToPut = arrayObject;
+              }
+              else if(arrayObject.getClass().getPackage().getName().startsWith("java.")){
+                itemToPut = arrayObject.toString();
+              }
+            }catch (Exception ignored){}
+          }
+
+          output.put(itemToPut);
+        }
+        
+        return output;
       }
       if (o instanceof Map) {
         return new JSONObject((Map) o);
